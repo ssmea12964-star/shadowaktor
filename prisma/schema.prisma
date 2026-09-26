@@ -1,0 +1,197 @@
+// ============================================
+// SCP AKTORLUK & RAPOR YONETIM PANELI - PRISMA
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum ActorRole {
+  DENEME_AKTOR
+  AKTOR
+  KIDEMLI_AKTOR
+  UST_AKTOR
+  BAS_AKTOR
+  AKTOR_SORUMLUSU
+}
+
+enum ReportStatus {
+  BEKLEMEDE
+  REVIZYON_ISTENDI
+  ONAYLANDI
+  REDDEDILDI
+}
+
+enum ActivityAction {
+  RAPOR_GONDERILDI
+  RAPOR_ONAYLANDI
+  RAPOR_REDDEDILDI
+  RAPOR_REVIZYON_ISTENDI
+  RAPOR_SILINDI
+  SCP_ATANDI
+  SCP_ATAMASI_SILINDI
+  CHAT_MESAJ_GONDERILDI
+  CHAT_MESAJ_SILINDI
+  CHAT_MESAJ_SABITLENDI
+  CHAT_MESAJ_SABITLEME_KALDIRILDI
+  CHAT_KULLANICI_SUSTURULDU
+  CHAT_DUYURU_YAYINLANDI
+  CHAT_DUYURU_SILINDI
+}
+
+model User {
+  id        String    @id @default(cuid())
+  discordId String    @unique
+  name      String?
+  username  String?
+  image     String?
+  email     String?
+  role      ActorRole?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  lastSeenAt DateTime?
+  chatLastReadAt DateTime?
+  mutedUntil DateTime?
+
+  reportsAuthored    Report[]        @relation("ReportAuthor")
+  reportsReviewed    Report[]        @relation("ReportReviewer")
+  scpAssignments     ScpAssignment[] @relation("AssignedActor")
+  scpAssignmentsMade ScpAssignment[] @relation("AssignedBy")
+  activitiesActed    ActivityLog[]   @relation("ActivityActor")
+  activitiesTargeted ActivityLog[]   @relation("ActivityTarget")
+  chatMessages       ChatMessage[]   @relation("ChatAuthor")
+  announcementsCreated Announcement[] @relation("AnnouncementCreator")
+  notifications      Notification[]
+
+  directMessagesSent     DirectMessage[] @relation("DirectMessageSender")
+  directMessagesReceived DirectMessage[] @relation("DirectMessageRecipient")
+}
+
+model ScpAssignment {
+  id          String   @id @default(cuid())
+  scpName     String
+  roleNote    String?  @db.Text
+  scheduledAt DateTime
+  createdAt   DateTime @default(now())
+
+  actor       User @relation("AssignedActor", fields: [actorId], references: [id])
+  actorId     String
+
+  assignedBy  User @relation("AssignedBy", fields: [assignedById], references: [id])
+  assignedById String
+
+  @@index([scheduledAt])
+}
+
+model Report {
+  id               String       @id @default(cuid())
+  scpOrRoleName    String
+  roleDate         DateTime
+  roleDurationMin  Int
+  accompaniedStaff String?      @db.Text
+  summary          String       @db.Text
+  status           ReportStatus @default(BEKLEMEDE)
+  rejectionReason  String?      @db.Text
+  reviewNote       String?      @db.Text
+
+  author      User  @relation("ReportAuthor", fields: [authorId], references: [id])
+  authorId    String
+  reviewedBy  User? @relation("ReportReviewer", fields: [reviewedById], references: [id])
+  reviewedById String?
+  reviewedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([authorId])
+}
+
+model ActivityLog {
+  id      String         @id @default(cuid())
+  action  ActivityAction
+  message String         @db.Text
+  detail  String?        @db.Text
+
+  actor      User  @relation("ActivityActor", fields: [actorId], references: [id])
+  actorId    String
+  targetUser User? @relation("ActivityTarget", fields: [targetUserId], references: [id])
+  targetUserId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  editedAt  DateTime?
+  deletedAt DateTime?
+  pinnedAt  DateTime?
+  pinnedById String?
+  attachmentUrl String?
+  attachmentName String?
+  attachmentType String?
+  attachmentSize Int?
+  author    User @relation("ChatAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  authorId  String
+
+  @@index([createdAt])
+  @@index([authorId, createdAt])
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  createdBy User @relation("AnnouncementCreator", fields: [createdById], references: [id])
+  createdById String
+
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String   @db.Text
+  type      String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  @@index([userId, createdAt])
+}
+
+model DirectMessage {
+  id            String   @id @default(cuid())
+  content       String   @db.Text
+  attachmentUrl String?
+  attachmentName String?
+  attachmentType String?
+  attachmentSize Int?
+  createdAt     DateTime @default(now())
+  editedAt      DateTime?
+  deletedAt     DateTime?
+  readAt        DateTime?
+
+  sender      User @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId    String
+  recipient   User @relation("DirectMessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  recipientId String
+
+  @@index([senderId, recipientId, createdAt])
+  @@index([recipientId, readAt, createdAt])
+}
